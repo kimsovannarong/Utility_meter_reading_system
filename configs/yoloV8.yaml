@@ -1,0 +1,40 @@
+# configs/yolov8.yaml
+model: yolov8n.pt
+data: datasets/detection/data.yaml
+epochs: 100
+patience: 50
+batch: 16
+imgsz: 640
+device: 'cpu'  # Use 'cpu' if you don't have GPU
+workers: 8
+project: models/detectors
+name: yolov8
+exist_ok: true
+
+# Optimization
+lr0: 0.01
+lrf: 0.01
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3.0
+warmup_momentum: 0.8
+warmup_bias_lr: 0.1
+
+# Augmentation
+hsv_h: 0.015
+hsv_s: 0.7
+hsv_v: 0.4
+degrees: 0.0
+translate: 0.1
+scale: 0.5
+shear: 0.0
+perspective: 0.0
+flipud: 0.0
+fliplr: 0.5
+mosaic: 1.0
+mixup: 0.0
+copy_paste: 0.0
+
+# Save settings
+save_period: -1
+save_dir: models/detectors/yolov8

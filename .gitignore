@@ -1,0 +1,16 @@
+# Create .gitignore
+cat > .gitignore << 'EOF'
+# Ignore only the datasets folder
+datasets/
+
+# But keep everything else
+!*.py
+!*.ipynb
+!*.md
+!*.txt
+!*.yaml
+!*.yml
+!*.json
+EOF
+
+CT2

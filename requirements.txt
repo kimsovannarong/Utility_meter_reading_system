@@ -1,0 +1,44 @@
+# Core & Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0  # YOLOv8
+transformers>=4.30.0  # DETR
+paddlepaddle>=2.5.0  # For PaddleOCR (choose GPU or CPU version)
+# For GPU: paddlepaddle-gpu==2.5.1
+
+# OCR Libraries
+paddleocr>=2.7.0
+easyocr>=1.7.0
+pytesseract>=0.3.10
+python-doctr>=0.5.0  # docTR
+
+# Computer Vision
+opencv-python>=4.7.0
+pillow>=10.0.0
+albumentations>=1.3.0
+roboflow>=1.1.1  # If you used Roboflow
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+pycocotools>=2.0.0  # For COCO evaluation
+
+# Visualization & Logging
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tensorboard>=2.13.0
+wandb>=0.15.0  # Optional: Weights & Biases
+tqdm>=4.65.0
+
+# Utilities
+pyyaml>=6.0
+scipy>=1.10.0
+joblib>=1.2.0
+pathlib>=1.0.1
+
+# CLI & Development
+ipython>=8.14.0
+jupyter>=1.0.0
+black>=23.3.0  # Code  formatting
+flake8>=6.0.0  # Linting
