@@ -1,0 +1,9 @@
+data: datasets/detection/data.yaml
+epochs: 25
+batch_size: 2
+learning_rate: 1e-4
+weight_decay: 1e-4
+warmup_steps: 1000
+num_workers: 2
+project: models/detectors/detr
+save_checkpoint_every: 5
