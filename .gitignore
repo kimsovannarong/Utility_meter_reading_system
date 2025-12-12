@@ -2,6 +2,8 @@
 cat > .gitignore << 'EOF'
 # Ignore only the datasets folder
 datasets/
+experiments/
+models/
 
 # But keep everything else
 !*.py

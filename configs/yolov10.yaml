@@ -1,0 +1,60 @@
+# configs/yolov10.yaml
+model: yolov10n.pt            # Specifies the model file for training[citation:1]
+data: datasets/detection/data.yaml
+epochs: 100                   # Total number of training epochs[citation:1]
+patience: 50                  # Early stopping patience[citation:1]
+batch: 16                     # Batch size[citation:1]
+imgsz: 640                    # Input image size[citation:1]
+device: cpu                   # Use 'cpu' if you don't have GPU[citation:1]
+workers: 8                    # Data loading workers[citation:1]
+project: models/detectors     # Project directory for outputs[citation:1]
+name: yolov10                 # Name of the training run[citation:1]
+exist_ok: true                # Overwrite existing directory[citation:1]
+
+# Optimization
+lr0: 0.01                     # Initial learning rate[citation:1]
+lrf: 0.01                     # Final learning rate factor[citation:1]
+momentum: 0.937               # Momentum factor[citation:1]
+weight_decay: 0.0005          # L2 regularization[citation:1]
+warmup_epochs: 3.0            # Learning rate warmup epochs[citation:1]
+warmup_momentum: 0.8          # Initial momentum during warmup[citation:1]
+warmup_bias_lr: 0.1           # Bias learning rate during warmup[citation:1]
+optimizer: auto               # Auto-selects optimizer (SGD/Adam/AdamW)[citation:1]
+
+# --- YOLOv10 Specific Parameters ---
+# NMS-Free Inference (Consistent Dual Assignments)
+# YOLOv10 eliminates NMS for faster inference[citation:2].
+# Ensure your Ultralytics version (>= 8.2.0) supports this.
+# No explicit parameter needed; the model architecture handles it.
+
+# Data Augmentation & Training Settings (similar to YOLOv8)
+hsv_h: 0.015
+hsv_s: 0.7
+hsv_v: 0.4
+degrees: 0.0
+translate: 0.1
+scale: 0.5
+shear: 0.0
+perspective: 0.0
+flipud: 0.0
+fliplr: 0.5
+mosaic: 1.0
+mixup: 0.0
+copy_paste: 0.0
+close_mosaic: 10              # Disables mosaic augmentation in last N epochs[citation:1]
+
+# Loss Weights (adjust if needed)
+box: 7.5                      # Box loss gain[citation:1]
+cls: 0.5                      # Classification loss gain[citation:1]
+dfl: 1.5                      # Distribution Focal Loss gain[citation:1]
+
+# Save & Logging
+save: true                    # Enables saving of checkpoints and final model[citation:1]
+save_period: -1               # Checkpoint save frequency (-1 disables)[citation:1]
+save_dir: models/detectors/yolov10
+
+# Other Settings (recommended defaults)
+pretrained: true              # Start from pretrained weights[citation:1]
+amp: true                     # Automatic Mixed Precision training[citation:1]
+deterministic: true           # Ensures reproducibility[citation:1]
+seed: 0                       # Random seed[citation:1]
