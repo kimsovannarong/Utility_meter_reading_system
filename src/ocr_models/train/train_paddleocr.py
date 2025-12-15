@@ -1,133 +1,154 @@
-#!/usr/bin/env python3
 """
-PaddleOCR Training Script
+STEP 4: Train PaddleOCR model on your digit data
 """
-
 import os
 import sys
+import subprocess
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent))
 
-from ocr_models.ocr_utils import BaseOCRTrainer
-import argparse
+def train_paddleocr():
+    print("=" * 60)
+    print("🚀 TRAINING PADDLEOCR MODEL")
+    print("=" * 60)
+    
+    # Step 4.1: Setup PaddleOCR
+    print("\n🔧 Setting up PaddleOCR...")
+    
+    paddleocr_dir = Path("PaddleOCR")
+    if not paddleocr_dir.exists():
+        print("Cloning PaddleOCR repository...")
+        subprocess.run(["git", "clone", "https://github.com/PaddlePaddle/PaddleOCR.git"], 
+                      check=True)
+    
+    # Step 4.2: Install requirements
+    print("\n📦 Installing requirements...")
+    req_file = paddleocr_dir / "requirements.txt"
+    if req_file.exists():
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(req_file)], 
+                      check=False)
+    
+    # Step 4.3: Download pretrained model
+    print("\n⬇️  Downloading pretrained model...")
+    pretrained_dir = paddleocr_dir / "pretrained_models"
+    pretrained_dir.mkdir(exist_ok=True)
+    
+    import urllib.request
+    import tarfile
+    
+    model_url = "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_rec_train.tar"
+    tar_path = pretrained_dir / "en_PP-OCRv3_rec_train.tar"
+    
+    if not tar_path.exists():
+        print("Downloading...")
+        urllib.request.urlretrieve(model_url, tar_path)
+        
+        print("Extracting...")
+        with tarfile.open(tar_path, 'r') as tar:
+            tar.extractall(pretrained_dir)
+        
+        os.remove(tar_path)
+    
+    # Step 4.4: Create config file
+    print("\n⚙️  Creating training configuration...")
+    create_paddleocr_config()
+    
+    # Step 4.5: Start training
+    print("\n🏋️  Starting training...")
+    print("This will take 30-60 minutes. Check logs in output/rec_digit/")
+    
+    original_dir = os.getcwd()
+    os.chdir(paddleocr_dir)
+    
+    try:
+        # Training command
+        cmd = [
+            sys.executable, "tools/train.py",
+            "-c", "../configs/rec_digit.yml",
+            "-o", "Global.epoch_num=50",
+            "Global.save_model_dir=./output/rec_digit",
+            f"Global.pretrained_model=./pretrained_models/en_PP-OCRv3_rec_train/best_accuracy"
+        ]
+        
+        print(f"\nRunning: {' '.join(cmd)}")
+        subprocess.run(cmd, check=True)
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Training error: {e}")
+    finally:
+        os.chdir(original_dir)
+    
+    print("\n" + "=" * 60)
+    print("✅ PADDLEOCR TRAINING COMPLETE!")
+    print("=" * 60)
+    print("\nNext steps:")
+    print("1. Test your model with: python test_paddleocr.py")
+    print("2. Export for inference: python export_paddleocr.py")
 
-try:
-    from paddleocr import PaddleOCR
-    PADDLEOCR_AVAILABLE = True
-except ImportError:
-    PADDLEOCR_AVAILABLE = False
+def create_paddleocr_config():
+    """Create PaddleOCR configuration file"""
+    config_content = """
+Global:
+  use_visualdl: false
+  save_model_dir: ./output/rec_digit
+  save_epoch_step: 10
+  eval_batch_step: [0, 100]
+  cal_metric_during_train: true
+  pretrained_model: ./pretrained_models/en_PP-OCRv3_rec_train/best_accuracy.pdparams
+  checkpoints: null
+  character_dict_path: ../datasets/ocr/digits_dict.txt
+  character_type: EN
+  max_text_length: 10
+  infer_mode: false
+  use_space_char: false
 
-class PaddleOCRTrainer(BaseOCRTrainer):
-    """PaddleOCR specific trainer"""
-    
-    def __init__(self):
-        super().__init__('paddleocr')
-        
-        if not PADDLEOCR_AVAILABLE:
-            print("PaddleOCR not installed. Install with:")
-            print("pip install paddleocr paddlepaddle")
-            self.model = None
-            return
-        
-        # Initialize PaddleOCR
-        self.model = PaddleOCR(
-            use_angle_cls=True,
-            lang='en',
-            det=False,  # We already have detection from YOLO/DETR
-            rec=True,   # Only recognition needed
-            show_log=False
-        )
-    
-    def train(self, train_data_path=None):
-        """Train PaddleOCR model (fine-tuning)"""
-        print(f"\n{'='*60}")
-        print(f"PADDLEOCR SETUP")
-        print(f"{'='*60}")
-        
-        if not PADDLEOCR_AVAILABLE:
-            return False
-        
-        print("PaddleOCR uses pre-trained models.")
-        print("For custom training, you need to:")
-        print("1. Prepare digit images with labels")
-        print("2. Use PaddleOCR's training tools")
-        print("3. Fine-tune on your meter digits")
-        
-        # For now, just test the model
-        return self.test_sample()
-    
-    def recognize(self, image):
-        """Recognize digits using PaddleOCR"""
-        if not PADDLEOCR_AVAILABLE or self.model is None:
-            return []
-        
-        # Run OCR
-        result = self.model.ocr(image, cls=True)
-        
-        if result is None or len(result) == 0:
-            return []
-        
-        digits = []
-        for line in result[0]:
-            text = line[1][0]
-            confidence = line[1][1]
-            
-            # Extract only digits
-            digit_text = ''.join(filter(str.isdigit, text))
-            
-            if digit_text:
-                digits.append({
-                    'text': digit_text,
-                    'confidence': confidence,
-                    'bbox': line[0]
-                })
-        
-        return digits
-    
-    def test_sample(self):
-        """Test PaddleOCR on sample image"""
-        print("\nTesting PaddleOCR on sample digit...")
-        
-        # Create a sample digit image for testing
-        import numpy as np
-        sample_img = np.ones((50, 200, 3), dtype=np.uint8) * 255
-        cv2.putText(sample_img, "12345", (10, 35), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-        
-        result = self.recognize(sample_img)
-        
-        if result:
-            print(f"✓ PaddleOCR detected: {result[0]['text']}")
-            return True
-        else:
-            print("✗ PaddleOCR test failed")
-            return False
-    
-    def get_model_info(self):
-        """Get PaddleOCR model information"""
-        return {
-            'type': 'PaddleOCR',
-            'language': 'en',
-            'detection': False,
-            'recognition': True,
-            'angle_classification': True
-        }
+Architecture:
+  model_type: rec
+  algorithm: CRNN
+  Transform: null
+  Backbone:
+    name: MobileNetV3
+    scale: 0.5
+    model_name: small
+  Neck:
+    name: SequenceEncoder
+    encoder_type: rnn
+    hidden_size: 48
+  Head:
+    name: CTCHead
 
-def main():
-    parser = argparse.ArgumentParser(description='Setup PaddleOCR for digit recognition')
-    parser.add_argument('--test', action='store_true',
-                       help='Test PaddleOCR on sample image')
+Train:
+  dataset:
+    name: SimpleDataSet
+    data_dir: ../datasets/ocr
+    label_file_list:
+      - ../datasets/ocr/train_list.txt
+  loader:
+    shuffle: true
+    batch_size_per_card: 64
+    drop_last: true
+    num_workers: 4
+
+Eval:
+  dataset:
+    name: SimpleDataSet
+    data_dir: ../datasets/ocr
+    label_file_list:
+      - ../datasets/ocr/val_list.txt
+  loader:
+    shuffle: false
+    drop_last: false
+    batch_size_per_card: 64
+    num_workers: 4
+"""
     
-    args = parser.parse_args()
+    config_dir = Path("configs")
+    config_dir.mkdir(exist_ok=True)
     
-    trainer = PaddleOCRTrainer()
+    config_file = config_dir / "rec_digit.yml"
+    with open(config_file, 'w') as f:
+        f.write(config_content)
     
-    if args.test:
-        trainer.test_sample()
-    else:
-        trainer.train()
+    print(f"Configuration saved to: {config_file}")
 
 if __name__ == "__main__":
-    import cv2
-    import numpy as np
-    main()
+    train_paddleocr()
