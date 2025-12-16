@@ -1,0 +1,276 @@
+from ultralytics import YOLO
+from paddleocr import PaddleOCR
+import cv2
+import os
+import json
+
+class MeterReadingPipeline:
+    def __init__(self, detector_model_path, ocr_model_dir=None):
+        """
+        Initialize pipeline with your best models.
+        """
+        print(f"🚀 Loading detector: {detector_model_path}")
+        self.detector = YOLO(detector_model_path)
+        
+        # Load OCR (use custom or default)
+        if ocr_model_dir and os.path.exists(ocr_model_dir):
+            print(f"📖 Loading custom OCR: {ocr_model_dir}")
+            self.ocr = PaddleOCR(
+                rec_model_dir=ocr_model_dir,
+                use_angle_cls=False,
+                lang='en',
+                show_log=False
+            )
+        else:
+            print("📖 Using default PaddleOCR")
+            self.ocr = PaddleOCR(use_angle_cls=False, lang='en', show_log=False)
+        
+        print(f"✅ Detector classes: {self.detector.names}")
+        print("=" * 50)
+    
+    def process_single_image(self, image_path):
+        """
+        Process single image and print result to console.
+        """
+        if not os.path.exists(image_path):
+            print(f"❌ Image not found: {image_path}")
+            return None
+        
+        print(f"\n🔍 Processing single image: {image_path}")
+        
+        # Load image
+        img = cv2.imread(image_path)
+        if img is None:
+            print(f"❌ Could not load image: {image_path}")
+            return None
+        
+        # Run detection
+        results = self.detector(img, conf=0.25, verbose=False)
+        
+        meter_type = "Unknown"
+        meter_conf = 0.0
+        digit_crop = None
+        reading = ""
+        reading_conf = 0.0
+        
+        # Process detections
+        if results[0].boxes is not None:
+            for box in results[0].boxes:
+                class_id = int(box.cls)
+                conf = float(box.conf[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                
+                class_name = self.detector.names.get(class_id, "")
+                
+                if class_name in ['water', 'electricity']:
+                    if conf > meter_conf:
+                        meter_type = class_name.capitalize()
+                        meter_conf = conf
+                        print(f"📊 Detected meter type: {meter_type} (confidence: {conf:.3f})")
+                
+                elif class_name in ['digits', '1']:
+                    crop = img[y1:y2, x1:x2]
+                    if crop.size > 50:
+                        digit_crop = crop
+                        print(f"📍 Digit region: [{x1}, {y1}, {x2}, {y2}] (size: {crop.shape})")
+        
+        # Run OCR on digit crop
+        if digit_crop is not None:
+            temp_path = 'temp_crop.jpg'
+            cv2.imwrite(temp_path, digit_crop)
+            
+            try:
+                ocr_result = self.ocr.ocr(temp_path, cls=False)
+                if ocr_result and ocr_result[0]:
+                    text = ocr_result[0][0][1][0]
+                    reading_conf = ocr_result[0][0][1][1] if len(ocr_result[0][0][1]) > 1 else 0.8
+                    reading = ''.join(filter(str.isdigit, text))
+                    print(f"🔤 OCR raw text: '{text}' → Filtered: '{reading}' (confidence: {reading_conf:.3f})")
+                else:
+                    print("⚠️  OCR returned no results")
+                os.remove(temp_path)
+            except Exception as e:
+                print(f"❌ OCR error: {e}")
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+        else:
+            print("⚠️  No digit region detected")
+        
+        # Calculate combined accuracy
+        accuracy = (meter_conf * 0.4 + reading_conf * 0.6) * 100
+        
+        result = {
+            "Meter Type": meter_type,
+            "Meter Number": reading if reading else "N/A",
+            "Accuracy": f"{accuracy:.2f}%"
+        }
+        
+        return result
+    
+    def process_test_folder(self, folder_path, output_json='test_results.json'):
+        """
+        Process all images in test folder and save to JSON.
+        """
+        if not os.path.exists(folder_path):
+            print(f"❌ Folder not found: {folder_path}")
+            return []
+        
+        # Get all image files
+        image_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']
+        image_paths = []
+        
+        for ext in image_extensions:
+            image_paths.extend([os.path.join(folder_path, f) for f in os.listdir(folder_path) 
+                               if f.lower().endswith(ext)])
+        
+        if not image_paths:
+            print(f"❌ No images found in: {folder_path}")
+            return []
+        
+        print(f"\n📁 Processing test folder: {folder_path}")
+        print(f"📊 Found {len(image_paths)} test images")
+        
+        results = []
+        for i, img_path in enumerate(image_paths):
+            print(f"\n  [{i+1}/{len(image_paths)}] Processing: {os.path.basename(img_path)}")
+            result = self.process_single_image(img_path)
+            if result:
+                result["Image"] = os.path.basename(img_path)
+                results.append(result)
+        
+        # Save to JSON
+        with open(output_json, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        
+        print(f"\n✅ All results saved to: {output_json}")
+        
+        # Print summary
+        print("\n" + "=" * 50)
+        print("📋 TEST FOLDER SUMMARY:")
+        successful = 0
+        for result in results:
+            if result['Meter Number'] != "N/A":
+                successful += 1
+            print(f"  {result['Image']}: {result['Meter Type']} - {result['Meter Number']} ({result['Accuracy']})")
+        
+        print(f"\n📈 Success rate: {successful}/{len(results)} ({successful/len(results)*100:.1f}%)")
+        print("=" * 50)
+        
+        return results
+
+# ==================== CONFIGURATION ====================
+# UPDATE THESE PATHS
+YOUR_BEST_DETECTOR = 'models/detectors/YOLOv11/weights/best.pt'  # Your YOLOv11 model
+YOUR_TRAINED_OCR = 'PaddleOCR/inference/rec_digit/'              # Your OCR model (if trained)
+
+# ==================== MAIN TEST FUNCTION ====================
+def test_pipeline():
+    """
+    Test the pipeline with single image and test folder.
+    """
+    print("=" * 60)
+    print("🔧 METER READING PIPELINE - PERFORMANCE TEST")
+    print("=" * 60)
+    
+    # Validate model path
+    if not os.path.exists(YOUR_BEST_DETECTOR):
+        print(f"❌ ERROR: Detector model not found at: {YOUR_BEST_DETECTOR}")
+        print("Please update YOUR_BEST_DETECTOR path.")
+        return
+    
+    # Initialize pipeline
+    pipeline = MeterReadingPipeline(
+        detector_model_path=YOUR_BEST_DETECTOR,
+        ocr_model_dir=YOUR_TRAINED_OCR if os.path.exists(YOUR_TRAINED_OCR) else None
+    )
+    
+    print("\nChoose test mode:")
+    print("1. Test with SINGLE image")
+    print("2. Test with FOLDER of images")
+    print("3. Test BOTH")
+    print("-" * 40)
+    
+    choice = input("Enter choice (1-3): ").strip()
+    
+    if choice == '1' or choice == '3':
+        # Single image test
+        print("\n" + "-" * 40)
+        print("📷 SINGLE IMAGE TEST")
+        print("-" * 40)
+        single_image = input("Enter single image path: ").strip().strip('"')
+        
+        if os.path.exists(single_image):
+            print("\n" + "=" * 40)
+            print("📊 SINGLE IMAGE RESULT:")
+            result = pipeline.process_single_image(single_image)
+            if result:
+                print("\n" + "-" * 40)
+                print("🎯 FINAL RESULT:")
+                print(json.dumps(result, indent=2))
+                print("-" * 40)
+        else:
+            print(f"❌ Image not found: {single_image}")
+    
+    if choice == '2' or choice == '3':
+        # Folder test
+        print("\n" + "-" * 40)
+        print("📁 FOLDER TEST")
+        print("-" * 40)
+        test_folder = input("Enter test folder path: ").strip().strip('"')
+        
+        if os.path.exists(test_folder):
+            output_file = input("Enter output JSON filename (default: test_results.json): ").strip()
+            if not output_file:
+                output_file = 'test_results.json'
+            
+            pipeline.process_test_folder(test_folder, output_file)
+        else:
+            print(f"❌ Folder not found: {test_folder}")
+
+# ==================== DIRECT TEST (Alternative) ====================
+def quick_test():
+    """
+    Quick test without interactive input.
+    Update the paths here and run directly.
+    """
+    # UPDATE THESE FOR DIRECT TESTING
+    SINGLE_TEST_IMAGE = "test_meter.jpg"      # Your test image
+    TEST_FOLDER = "test_images/"              # Your test folder
+    
+    print("🔧 QUICK PERFORMANCE TEST")
+    
+    # Initialize pipeline
+    pipeline = MeterReadingPipeline(
+        detector_model_path=YOUR_BEST_DETECTOR,
+        ocr_model_dir=YOUR_TRAINED_OCR if os.path.exists(YOUR_TRAINED_OCR) else None
+    )
+    
+    # Test single image
+    if os.path.exists(SINGLE_TEST_IMAGE):
+        print(f"\n📷 Testing single image: {SINGLE_TEST_IMAGE}")
+        result = pipeline.process_single_image(SINGLE_TEST_IMAGE)
+        if result:
+            print("\n🎯 RESULT:")
+            print(json.dumps(result, indent=2))
+    
+    # Test folder
+    if os.path.exists(TEST_FOLDER):
+        print(f"\n📁 Testing folder: {TEST_FOLDER}")
+        pipeline.process_test_folder(TEST_FOLDER, "performance_results.json")
+
+# ==================== MAIN EXECUTION ====================
+if __name__ == "__main__":
+    # Choose how to run
+    print("Select run mode:")
+    print("1. Interactive test (enter paths when prompted)")
+    print("2. Quick test (use pre-defined paths)")
+    
+    mode = input("Enter choice (1-2): ").strip()
+    
+    if mode == '1':
+        test_pipeline()  # Interactive mode
+    elif mode == '2':
+        quick_test()     # Quick test with pre-defined paths
+    else:
+        print("❌ Invalid choice. Running interactive mode...")
+        test_pipeline()
